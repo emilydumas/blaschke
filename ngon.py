@@ -101,6 +101,8 @@ if args.boundary:
 if args.vertices:
     sys.stderr.write('Clustering.\n')
     verts = cluster(ptlist,nvert)
+    if len(verts) != nvert:
+        raise ValueError('Wrong number of clusters:  Expected %d, found %d' % (nvert, len(verts))) 
     if args.boundary:
         print ''
     for v in verts:
