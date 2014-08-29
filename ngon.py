@@ -18,7 +18,7 @@ PDE_NTHETA=150
 PDE_RMAX=6.0
 ODE_RAYSTRIDE=2
 ODE_RSTEP=0.005
-ODE_RMAX=4.0
+ODE_RMAX=3.0
 ODE_TOL=0.00001
 
 
@@ -35,7 +35,7 @@ parser.add_argument('coefs',type=complex,nargs='+',help='coefficients, constant 
 parser.add_argument('--develop',type=complex,nargs='+',help='other points to develop, complex() format')
 parser.add_argument('--nr',type=int,default=PDE_NR,help='Number of radius steps')
 parser.add_argument('--ntheta',type=int,default=PDE_NTHETA,help='Number of theta steps')
-parser.add_argument('--rmax',type=int,default=PDE_RMAX,help='Maximum integration radius')
+parser.add_argument('--rmax',type=float,default=PDE_RMAX,help='Maximum integration radius')
 
 args = parser.parse_args()
 
@@ -92,7 +92,7 @@ def poly(theta,coefs,z):
 bl = BlaschkeMetric(PDE_RMAX,PDE_NR,PDE_NTHETA,thresh=PDE_THRESH)
 c = partial(poly,theta,coefs)
 
-ptlist = bl.getboundary(c,r=ODE_RMAX,stride=ODE_RAYSTRIDE,step=ODE_RSTEP,tol=ODE_TOL)
+ptlist = bl.getboundary(c,r=0.65*PDE_RMAX,stride=ODE_RAYSTRIDE,step=ODE_RSTEP,tol=ODE_TOL)
 
 if args.boundary:
     for p in ptlist:
@@ -107,13 +107,13 @@ if args.vertices:
         print '%f %f' % tuple(v)
 
 if args.roots:
-    vlist = bl.getimages(roots,step=ODE_RSTEP,tol=ODE_TOL,result="point")
+    vlist = bl.getimages(roots,step=ODE_RSTEP,tol=ODE_TOL)
     print ''
     for v in vlist:
         print '%f %f' % tuple(v)
 
 if args.develop:
-    vlist = bl.getimages(args.develop,step=ODE_RSTEP,tol=ODE_TOL,result="point")
+    vlist = bl.getimages(args.develop,step=ODE_RSTEP,tol=ODE_TOL)
     print ''
     for v in vlist:
         print '%f %f' % tuple(v)

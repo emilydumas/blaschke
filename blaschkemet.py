@@ -66,37 +66,19 @@ class BlaschkeMetric(WangLinearization):
         v = self.diamvec(j)
         return interpolate.interp1d(v[:,0],v[:,1:],"quadratic",axis=0)
 
-    def rayint(self,j,r,step=0.01,tol=0.00001,result="point"):
-        ucf = self.diamfunc(j)
+    def rayint(self,j,r,step=0.01,tol=0.00001):
+        ucf = self.diamfunc(j)  # ucf = "u and c function; gives (u,ux,uy,creal,cimag)"
         odef = functools.partial(odeA,self.theta(j),ucf)
         solver = complex_ode(odef)
         solver.set_integrator("vode",method="adams",with_jacobian=False,first_step=(step*r),rtol=tol,nsteps=5000)
         solver.set_initial_value(self.yinit,0.0)
         solver.integrate(r)
-        if result == "point":
-            return self.coord_normalize(solver.y)
-        else:
-            return self.construct_frame(solver.y)
+        return self.coord_normalize(solver.y)
 
     def coord_normalize(self,y):
-        z1 = (y[0] + 1j*y[1])
-        z2 = (y[2] + 1j*y[3])
-        z3 = (y[4] + 1j*y[5])
-        return (z1.real, z2.real, z3.real)
+        return (y[0].real, y[1].real, y[2].real)
 
-    def construct_frame(self,y):
-        z1 = (y[0] + 1j*y[1])
-        z2 = (y[2] + 1j*y[3])
-        z3 = (y[4] + 1j*y[5])
-        z4 = (y[6] + 1j*y[7])
-        z5 = (y[8] + 1j*y[9])
-        z6 = (y[10] + 1j*y[11])
-        z7 = (y[12] + 1j*y[13])
-        z8 = (y[14] + 1j*y[15])
-        z9 = (y[16] + 1j*y[17])
-        return array([[z1,z2,z3], [z4,z5,z6], [z7,z8,z9]])
-
-    def getboundary(self,c,r=None,stride=2,step=0.01,tol=0.0001,result="point"):
+    def getboundary(self,c,r=None,stride=2,step=0.01,tol=0.0001):
         BlaschkeMetric.compute(self,c)
         if r==None:
             r = 0.65 * self.rmax
@@ -105,16 +87,13 @@ class BlaschkeMetric(WangLinearization):
         prog = percentdone(nrays,stream=sys.stderr,prefix='ODE: rays')
         vlist = []
         for j in xrange(0,self.nt,stride):
-            res = self.rayint(j,r,step=step,tol=tol,result=result)
-            if result=="point":
-                x,y,z = res
-                vlist.append( array( (y/x,z/x) ) )
-            else:
-                vlist.append(res)
+            res = self.rayint(j,r,step=step,tol=tol)
+            x,y,z = res
+            vlist.append( array( (y/x,z/x) ) )
             prog.step()
         return vlist
 
-    def getimages(self,zlist,step=0.01,tol=0.0001,result="point"):
+    def getimages(self,zlist,step=0.01,tol=0.0001):
         # BAD PRACTICE: This function assumes a previous call to BlaschkeMetric.compute!
         vlist = []
         for z in zlist:
@@ -123,7 +102,7 @@ class BlaschkeMetric(WangLinearization):
                 sys.stderr.write('ODE: Warning: requested interior point is near the boundary; accuracy will be poor.\n')
             j = int(t / self.dt) # Nearest theta that has been computed
             sys.stderr.write('ODE: Using r=%f, t=%f, j=%d (of %d) for z=%f+j%f\n' % (r,t,j,self.nt,z.real,z.imag))
-            res = self.rayint(j,r,step=step,tol=tol,result=result)
+            res = self.rayint(j,r,step=step,tol=tol)
             if result=="point":
                 x,y,z = res
                 vlist.append( array( (y/x,z/x) ) )
