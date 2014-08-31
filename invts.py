@@ -2,9 +2,11 @@
 import sys
 
 def birapport(p0,p1,p2,p3,p4):
-    x0,y0 = p0
-    x1,y1 = p1
-    x2,y2 = p2
+    '''Cross ratio of lines [p0p2], [p1p2], [p3p2], [p4p2]'''
+    x0,y0 = p2  # base point
+
+    x1,y1 = p0  # for the rest, use the cyclic order
+    x2,y2 = p1
     x3,y3 = p3
     x4,y4 = p4
 
@@ -25,12 +27,15 @@ def parser(f):
             except Exception:
                 pass
 
-verts = [p for p in parser(sys.stdin)]
-nvert = len(verts)
+def polygon_5chain_invts(verts):
+    '''Compute cross ratios of lines from each vertex to its four closes neighbors'''
+    nverts = len(verts)
+    verts = verts + verts
+    return [ birapport(*verts[i:i+5]) for i in range(nverts) ]
 
-verts = verts + verts
-
-xlist = [ birapport(*verts[i:i+5]) for i in range(nvert) ]
-for x in xlist:
-    print x,
+if __name__=='__main__':
+    verts = [p for p in parser(sys.stdin)]
+    xlist = polygon_5chain_invts(verts)
+    for x in xlist:
+        print x,
 
