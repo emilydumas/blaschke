@@ -1,4 +1,6 @@
 #!/usr/bin/python
+'''Compute cross ratio parameters for a polygon in RP^2'''
+
 import sys
 
 def birapport(p0,p1,p2,p3,p4):

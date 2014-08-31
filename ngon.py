@@ -1,4 +1,5 @@
 #!/usr/bin/python
+'''Compute the polygon corresponding to an affine sphere with a given polynomial Pick differential'''
 
 # DEFAULT SOLVER PARAMETERS
 
