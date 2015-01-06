@@ -1,7 +1,7 @@
 from polarlap import PolarLaplacian
 from scipy import sparse,apply_along_axis,vectorize
 from scipy.sparse.linalg import spsolve
-from itertools import partial
+from functools import partial
 import math
 import cmath
 import sys
