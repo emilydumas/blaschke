@@ -34,6 +34,7 @@ class PolarLaplacian(PolarGrid):
         m = sparse.dok_matrix((self.N,self.N))
         epsilon = 1.0 / self.dr
         
+        # df/dr always zero at origin; iterate over other points
         for i in range(1,self.nr-1):
             for j in range(0,self.nt):
                 m[self.toidx(i,j),self.toidx(i-1,j)] = -0.5*epsilon
@@ -45,14 +46,16 @@ class PolarLaplacian(PolarGrid):
         m = sparse.dok_matrix((self.N,self.N))
         esq = 1.0 / (self.dr*self.dr)
         
+        # Regular points -- standard finite difference 2nd deriv
         for i in range(1,self.nr-1):
             for j in range(0,self.nt):
                 m[self.toidx(i,j),self.toidx(i-1,j)] = esq
                 m[self.toidx(i,j),self.toidx(i+1,j)] = esq
                 m[self.toidx(i,j),self.toidx(i,j)] = -2.0*esq
+        # Special handling for the origin
+        # (average over circle of radius dr minus value at (0,0))
         for j in range(self.nt):
             m[self.toidx(0,0),self.toidx(1,j)] = 2.0*esq / float(self.nt)
-
         m[self.toidx(0,0),self.toidx(0,0)] = -2*esq
 
         return m.tocsr()
@@ -61,7 +64,8 @@ class PolarLaplacian(PolarGrid):
         m = sparse.dok_matrix((self.N,self.N))
         epsilon = 1.0/self.dt
         
-        for i in range(1,self.nr):
+        # df/dtheta always zero at the origin; iterate over other points
+        for i in range(1,self.nr-1):
             for j in range(0,self.nt):
                 m[self.toidx(i,j),self.toidx(i,(j+1)%self.nt)] = 0.5*epsilon
                 m[self.toidx(i,j),self.toidx(i,(j-1)%self.nt)] = -0.5*epsilon
@@ -73,7 +77,8 @@ class PolarLaplacian(PolarGrid):
         m = sparse.dok_matrix((self.N,self.N))
         esq = 1.0/(self.dt*self.dt)
         
-        for i in range(1,self.nr):
+        # d^2f/dtheta^2 always zero at the origin; iterate over other points
+        for i in range(1,self.nr-1):
             for j in range(0,self.nt):
                 m[self.toidx(i,j),self.toidx(i,(j+1)%self.nt)] = esq
                 m[self.toidx(i,j),self.toidx(i,(j-1)%self.nt)] = esq
