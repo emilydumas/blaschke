@@ -1,32 +1,43 @@
 #!/usr/bin/python
 '''Compute the polygon corresponding to an affine sphere with a given polynomial Pick differential'''
 
-# DEFAULT SOLVER PARAMETERS
+_VERSION = '0.0.2'
 
+# DEFAULT SOLVER PARAMETERS
 PDE_THRESH=5e-7
 PDE_NR=50
 PDE_NTHETA=150
 PDE_RMAX=6.0
-ODE_RAYSTRIDE=2
-ODE_RSTEP=0.005
 ODE_RMAX=3.0
-ODE_TOL=0.00001
+ODE_THRESH=0.00001
 
+# OPTIONS CURRENTLY NOT EXPOSED ON COMMAND LINE
+_ODE_RAYSTRIDE=2
+_ODE_RSTEP=0.005
 
 import sys
 import argparse
 
 parser = argparse.ArgumentParser(description='Computes (degree+3)-gon corresponding to polynomial.\n')
-parser.add_argument('-t','--theta',type=float,default=0.0,help='multply by exp(i theta)')
-parser.add_argument('-b','--boundary',action='store_true',help='output full boundary')
-parser.add_argument('-v','--vertices',action='store_true',help='output the vertices')
-parser.add_argument('-r','--roots',action='store_true',help='instead of coefficients, roots are given')
-parser.add_argument('-z','--zero',action='store_true',help='roots sum to zero (only meaningful if -r | --roots given)')
 parser.add_argument('coefs',type=complex,nargs='+',help='coefficients, constant term first, complex() format')
-parser.add_argument('--develop',type=complex,nargs='+',help='other points to develop, complex() format')
-parser.add_argument('--nr',type=int,default=PDE_NR,help='Number of radius steps')
-parser.add_argument('--ntheta',type=int,default=PDE_NTHETA,help='Number of theta steps')
-parser.add_argument('--rmax',type=float,default=PDE_RMAX,help='Maximum integration radius')
+parser.add_argument('--version', action='version', version='%(prog)s '+_VERSION)
+
+group_basic = parser.add_argument_group('basic options')
+group_basic.add_argument('-q','--quiet',action='store_true',help='do not write command line as a comment in output file')
+group_basic.add_argument('-t','--theta',type=float,default=0.0,help='multply by exp(i theta)')
+group_basic.add_argument('-b','--boundary',action='store_true',help='output full boundary')
+group_basic.add_argument('-v','--vertices',action='store_true',help='output the vertices')
+group_basic.add_argument('-r','--roots',action='store_true',help='instead of coefficients, roots are given')
+group_basic.add_argument('-z','--zero',action='store_true',help='roots sum to zero (only meaningful if -r | --roots given)')
+group_basic.add_argument('--develop',type=complex,nargs='+',help='other points to develop, complex() format')
+
+group_advanced = parser.add_argument_group('advanced options')
+group_advanced.add_argument('--nr',type=int,default=PDE_NR,help='Number of radius steps')
+group_advanced.add_argument('--ntheta',type=int,default=PDE_NTHETA,help='Number of theta steps')
+group_advanced.add_argument('--rmax',type=float,default=PDE_RMAX,help='Max radius for Blaschke metric computation')
+group_advanced.add_argument('--rint',type=float,default=ODE_RMAX,help='Max radius for ODE integration')
+group_advanced.add_argument('--pde-epsilon',type=float,default=PDE_THRESH,help='Tolerance for PDE solver')
+group_advanced.add_argument('--ode-epsilon',type=float,default=ODE_THRESH,help='Tolerance for ODE solver')
 
 args = parser.parse_args()
 
@@ -61,10 +72,6 @@ else:
     coefs = args.coefs
     degree = len(coefs)-1
 
-PDE_NR = args.nr
-PDE_NTHETA = args.ntheta
-PDE_RMAX = args.rmax
-
 sys.stderr.write('degree=%d coefs=%s\n' % (degree,coefs))
 nvert = degree+3
 
@@ -80,10 +87,18 @@ def poly(theta,coefs,z):
         result = result*z + c
     return exp(1j * theta)*result
 
-bl = BlaschkeMetric(PDE_RMAX,PDE_NR,PDE_NTHETA,thresh=PDE_THRESH)
-c = partial(poly,theta,coefs)
+# Compute Blaschke metric, frame field, approximate boundary
 
-ptlist = bl.getboundary(c,r=0.65*PDE_RMAX,stride=ODE_RAYSTRIDE,step=ODE_RSTEP,tol=ODE_TOL)
+bl = BlaschkeMetric(args.rmax,args.nr,args.ntheta,thresh=args.pde_epsilon)
+c = partial(poly,theta,coefs)
+ptlist = bl.getboundary(c,r=args.rint,stride=_ODE_RAYSTRIDE,step=_ODE_RSTEP,tol=args.ode_epsilon)
+
+# Output
+
+if not args.quiet:
+    from email.Utils import formatdate
+    print '#',' '.join(sys.argv)
+    print '#',formatdate(localtime=True)
 
 if args.boundary:
     for p in ptlist:
@@ -100,13 +115,13 @@ if args.vertices:
         print '%f %f' % tuple(v)
 
 if args.roots:
-    vlist = bl.getimages(roots,step=ODE_RSTEP,tol=ODE_TOL)
+    vlist = bl.getimages(roots,step=_ODE_RSTEP,tol=args.ode_epsilon)
     print ''
     for v in vlist:
         print '%f %f' % tuple(v)
 
 if args.develop:
-    vlist = bl.getimages(args.develop,step=ODE_RSTEP,tol=ODE_TOL)
+    vlist = bl.getimages(args.develop,step=_ODE_RSTEP,tol=args.ode_epsilon)
     print ''
     for v in vlist:
         print '%f %f' % tuple(v)

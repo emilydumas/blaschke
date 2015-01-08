@@ -10,7 +10,7 @@ The frame field is then computed by integrating the affine structure equations u
 
 Compute the vertices of the polygon corresponding to z^2 dz^3.  The result should be projectively equivalent to the regular pentagon.  Note that the polynomial is specified by its tuple of coefficients, z^2 = [0, 0, 1].
 
-    python ngon.py --vertices 0 0 1
+    python ngon.py --vertices 1 0 1
 
 The vertices are written to stdout, one per line.
 

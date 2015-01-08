@@ -1,6 +1,7 @@
 from polarlap import PolarLaplacian
 from scipy import sparse,apply_along_axis,vectorize
 from scipy.sparse.linalg import spsolve
+from functools import partial
 import math
 import cmath
 import sys
@@ -15,8 +16,14 @@ def cfunc(a):
     u = a[1]
     return (-2.0*math.exp(u) - 8.0*math.exp(-2.0*u)*cs)
 
-def uinitfunc(cs):
-    return (1.0/3.0)*math.log(2.0*math.exp(-cs*cs)+2.0*cs)
+# In what follows, cs means "norm C squared", where C is the cubic differential
+
+def uinitfunc(rfrac, cs):
+    '''Smoothed flat metric for initial guess; is exactly the flat metric on the boundary.
+    rfrac = (r/rmax),
+    cs = |C|^2'''
+    rho = 1.0 - (rfrac)**2
+    return (1.0/3.0)*math.log(2.0*rho*math.exp(-cs*cs)+2.0*cs)
 
 class WangLinearization(PolarLaplacian):
     """Linearization of Wang equation on a polar grid"""
@@ -47,7 +54,7 @@ class WangLinearization(PolarLaplacian):
         if uzero != None:
             u = uzero
         else:
-            u = vectorize(uinitfunc)(self.csqvec)
+            u = vectorize(uinitfunc)((1/self.rmax)*self.rvec,self.csqvec)
         n = 0
         delta = max(abs(self.op_bvec(u)))
         sys.stderr.write('PDE: GOAL=%f\n' % self.thresh)
@@ -55,14 +62,15 @@ class WangLinearization(PolarLaplacian):
             udot = self.step(u)
             u = u + 0.7*udot
             delta = max(abs(self.op_bvec(u)))
+            udotnorm = max(abs(udot))
             n = n + 1
-            sys.stderr.write('PDE: delta=%f\n' % delta)
+            sys.stderr.write('PDE: error=%f  delta=%f\n' % (delta,udotnorm))
         return u
 
 def _moduletest():
     def c(z):
         return 2.0*z*z*z
-    gr = WangLinearization(8.0,200,50)
+    gr = WangLinearization(8.0,25,50)
     gr.compute(c)
     for r,k in gr.diameter_rk(0):
         print r, gr.u[k]
