@@ -62,8 +62,9 @@ class WangLinearization(PolarLaplacian):
             udot = self.step(u)
             u = u + 0.7*udot
             delta = max(abs(self.op_bvec(u)))
+            udotnorm = max(abs(udot))
             n = n + 1
-            sys.stderr.write('PDE: delta=%f\n' % delta)
+            sys.stderr.write('PDE: error=%f  delta=%f\n' % (delta,udotnorm))
         return u
 
 def _moduletest():
