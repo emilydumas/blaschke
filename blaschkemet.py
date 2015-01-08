@@ -1,48 +1,61 @@
+import numpy as np
 from wanglin import WangLinearization
 from scipy import sin,cos,arange,interpolate,array,vectorize,matrix,real
 import functools
 import sys
-import cmath
 from indicator import percentdone
 
-try:
-    from scipy.integrate import complex_ode
-except ImportError:
-    from cxode import complex_ode
+from scipy.integrate import ode
 
-def pmat(a):
+# CONVENTIONS
+
+# Infinitesimal invariants of the affine sphere are passed around as "a-vectors",
+# which are 5-tuples consisting of
+#   (u(p), du/dx(p), du/dy(p), Re(C(p)), Im(C(p)))
+
+# The affine frame field is considered as a 3x3 matrix in which the ROWS are
+#   f, f_x, f_y
+
+def coefmat_dx(a):
     u = a[0]
     ux = a[1]
     uy = a[2]
     cr = a[3]
     ci = a[4]
-    return matrix([ [0.0,1.0,0.0], 
-                    [0,0.5*(ux - 1j*uy),(cr+1j*ci)*cmath.exp(-u)],
-                    [0.5*cmath.exp(u),0.0,0.0] ])
 
-def qmat(a):
+    emu = np.exp(-u)
+
+    return matrix([ [0.0, 1.0, 0.0],
+                    [np.exp(u), cr*emu + 0.5*ux, -ci*emu - 0.5*uy],
+                    [0.0, -ci*emu + 0.5*uy, -cr*emu + 0.5*ux] ])
+
+def coefmat_dy(a):
     u = a[0]
     ux = a[1]
     uy = a[2]
     cr = a[3]
     ci = a[4]
-    return matrix([ [0.0,0.0,1.0], 
-                    [0.5*cmath.exp(u),0.0,0.0],
-                    [0.0,(cr-1j*ci)*cmath.exp(-u),0.5*(ux + 1j*uy)] ])
+
+    emu = np.exp(-u)
+
+    return matrix([ [0.0, 0.0, 1.0],
+                    [0.0, -ci*emu + 0.5*uy, -cr*emu + 0.5*ux],
+                    [np.exp(u), -cr*emu - 0.5*ux, ci*emu + 0.5*uy] ])
+
 
 def coefmat(theta,a):
-    return cmath.exp(1j*theta)*pmat(a) + cmath.exp(-1j*theta)*qmat(a)
+    return cos(theta)*coefmat_dx(a) + sin(theta)*coefmat_dy(a)
 
 def odeA(theta,ucf,t,y):
     m = coefmat(theta,ucf(t))
     ya = matrix(y)
     ya.shape = (3,3)
-    return (m * ya).ravel()
+    return (m * ya).ravel() # flatten 3x3 matrix to 9-vector
 
 def phase(z):
-    a = cmath.phase(z)
+    a = np.angle(z)
     if a < 0:
-        return 2.0*cmath.pi+a
+        return 2.0*np.pi+a
     else:
         return a
 
@@ -53,7 +66,7 @@ class BlaschkeMetric(WangLinearization):
         self._ur = self.drmat * self.u
         self.ux = cos(self.tvec)*self._ur - sin(self.tvec)*self.irvec*self._ut
         self.uy = sin(self.tvec)*self._ur + cos(self.tvec)*self.irvec*self._ut
-        self.yinit = array([1,0,0,0,0.5,0.5j,0,0.5,-0.5j])
+        self.yinit = np.eye(3).ravel()
         
     def diamvec(self,j):
         """vector of values (r,u,ux,uy,c)"""
@@ -64,19 +77,22 @@ class BlaschkeMetric(WangLinearization):
 
     def diamfunc(self,j):
         v = self.diamvec(j)
-        return interpolate.interp1d(v[:,0],v[:,1:],"quadratic",axis=0)
+        return interpolate.interp1d(v[:,0],v[:,1:],kind="quadratic",axis=0)
 
-    def rayint(self,j,r,step=0.01,tol=0.00001):
-        ucf = self.diamfunc(j)  # ucf = "u and c function; gives (u,ux,uy,creal,cimag)"
+    def rayint(self,j,r,step=0.01,tol=0.00001,result='point'):
+        ucf = self.diamfunc(j)  # ucf = "u and c function; returns a-vector (u,ux,uy,creal,cimag)"
         odef = functools.partial(odeA,self.theta(j),ucf)
-        solver = complex_ode(odef)
+        solver = ode(odef)
         solver.set_integrator("vode",method="adams",with_jacobian=False,first_step=(step*r),rtol=tol,nsteps=5000)
         solver.set_initial_value(self.yinit,0.0)
         solver.integrate(r)
-        return self.coord_normalize(solver.y)
+        if result=='point':
+            return self.coord_normalize(solver.y)
+        else:
+            return solver.y.reshape((3,3))
 
     def coord_normalize(self,y):
-        return (y[0].real, y[1].real, y[2].real)
+        return (y[0], y[1], y[2])
 
     def getboundary(self,c,r=None,stride=2,step=0.01,tol=0.0001):
         BlaschkeMetric.compute(self,c)
