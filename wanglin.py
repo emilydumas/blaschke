@@ -44,6 +44,7 @@ class WangLinearization(object):
             self.req = req
 
     def compute(self,c,*args,**kwargs):
+        self.c = c
         self.cvec = vectorize(c)(self.grid.zv)
         self.csqvec = abs(self.cvec*self.cvec)
         self.u = self.iterate(*args,**kwargs)

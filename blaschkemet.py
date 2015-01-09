@@ -1,4 +1,5 @@
 import numpy as np
+import disclap
 from wanglin import WangLinearization
 from scipy import sin,cos,arange,interpolate,array,vectorize,matrix,real
 import functools
@@ -46,8 +47,8 @@ def coefmat_dy(a):
 def coefmat(theta,a):
     return cos(theta)*coefmat_dx(a) + sin(theta)*coefmat_dy(a)
 
-def odeA(theta,ucf,t,y):
-    m = coefmat(theta,ucf(t))
+def odeA(theta,pcdata,t,y):
+    m = coefmat(theta,pcdata(t * np.exp(1j*theta)))
     ya = matrix(y)
     ya.shape = (3,3)
     return (m * ya).ravel() # flatten 3x3 matrix to 9-vector
@@ -62,78 +63,76 @@ def phase(z):
 class BlaschkeMetric(WangLinearization):
     def compute(self,c,*args,**kwargs):
         WangLinearization.compute(self,c,*args,**kwargs)
-        self._ut = self.dtmat * self.u
-        self._ur = self.drmat * self.u
-        self.ux = cos(self.tvec)*self._ur - sin(self.tvec)*self.irvec*self._ut
-        self.uy = sin(self.tvec)*self._ur + cos(self.tvec)*self.irvec*self._ut
+        self.ux = disclap.discdx(self.grid) * self.u
+        self.uy = disclap.discdy(self.grid) * self.u
         self.yinit = np.eye(3).ravel()
         
-    def diamvec(self,j):
-        """vector of values (r,u,ux,uy,c)"""
-        return array([ (r,self.u[k],self.ux[k],self.uy[k],self.cvec[k].real, self.cvec[k].imag) for r,k in self.diameter_rk(j) ])
+        self.uinterp = interpolate.RectBivariateSpline(self.grid.x,self.grid.y,np.transpose(self.u.reshape((self.grid.nx,self.grid.ny))))
+        self.uxinterp = interpolate.RectBivariateSpline(self.grid.x,self.grid.y,np.transpose(self.ux.reshape((self.grid.nx,self.grid.ny))))
+        self.uyinterp = interpolate.RectBivariateSpline(self.grid.x,self.grid.y,np.transpose(self.uy.reshape((self.grid.nx,self.grid.ny))))
 
-    def theta(self,j):
-        return self.tvec[j]
+    def pcdata(self,z):
+        cval = self.c(z)
+        return np.array( [self.uinterp(z.real,z.imag),
+                          self.uxinterp(z.real,z.imag),
+                          self.uyinterp(z.real,z.imag),
+                          cval.real,
+                          cval.imag] )
 
-    def diamfunc(self,j):
-        v = self.diamvec(j)
-        return interpolate.interp1d(v[:,0],v[:,1:],kind="quadratic",axis=0)
-
-    def rayint(self,j,r,step=0.01,tol=0.00001,result='point'):
-        ucf = self.diamfunc(j)  # ucf = "u and c function; returns a-vector (u,ux,uy,creal,cimag)"
-        odef = functools.partial(odeA,self.theta(j),ucf)
+    def rayint(self,r,theta,step=0.01,tol=0.00001):
+        odef = functools.partial(odeA,theta,self.pcdata)
         solver = ode(odef)
         solver.set_integrator("vode",method="adams",with_jacobian=False,first_step=(step*r),rtol=tol,nsteps=5000)
         solver.set_initial_value(self.yinit,0.0)
         solver.integrate(r)
-        if result=='point':
-            return self.coord_normalize(solver.y)
-        else:
-            return solver.y.reshape((3,3))
+        return solver.y.reshape((3,3))
 
-    def coord_normalize(self,y):
-        return (y[0], y[1], y[2])
 
-    def getboundary(self,c,r=None,stride=2,step=0.01,tol=0.0001):
+    def getboundary(self,c,n,r=None,theta0=0.0,step=0.01,tol=0.0001,result='affine'):
+        thetas = np.linspace(theta0, theta0 + 2*np.pi, num=n, endpoint=False)
         BlaschkeMetric.compute(self,c)
         if r==None:
-            r = 0.65 * self.rmax
-        nrays = int(self.nt / stride)
-        sys.stderr.write('ODE: integrating %d rays (stride=%d)\n' % (nrays,stride))
-        prog = percentdone(nrays,stream=sys.stderr,prefix='ODE: rays')
+            r = 0.9 * self.grid.r
+        sys.stderr.write('ODE: integrating %d rays\n' % n)
+        prog = percentdone(n,stream=sys.stderr,prefix='ODE: rays')
         vlist = []
-        for j in xrange(0,self.nt,stride):
-            res = self.rayint(j,r,step=step,tol=tol)
-            x,y,z = res
-            vlist.append( array( (y/x,z/x) ) )
+        for theta in thetas:
+            res = self.rayint(r,theta,step=step,tol=tol)
+            if result == 'affine':
+                vlist.append( res[0,1:] / res[0,0] )
+            elif result == 'homog':
+                vlist.append( res[0,:] )
+            elif result == 'frame':
+                vlist.append( res )
             prog.step()
         return vlist
 
-    def getimages(self,zlist,step=0.01,tol=0.0001):
-        # BAD PRACTICE: This function assumes a previous call to BlaschkeMetric.compute!
-        vlist = []
-        for z in zlist:
-            r,t = abs(z), phase(z)
-            if r > 0.65*self.rmax:
-                sys.stderr.write('ODE: Warning: requested interior point is near the boundary; accuracy will be poor.\n')
-            j = int(t / self.dt) # Nearest theta that has been computed
-            sys.stderr.write('ODE: Using r=%f, t=%f, j=%d (of %d) for z=%f+j%f\n' % (r,t,j,self.nt,z.real,z.imag))
-            res = self.rayint(j,r,step=step,tol=tol)
-            if result=="point":
-                x,y,z = res
-                vlist.append( array( (y/x,z/x) ) )
-            else:
-                vlist.append(res)
-        return vlist
+    # def getimages(self,zlist,step=0.01,tol=0.0001):
+    #     # BAD PRACTICE: This function assumes a previous call to BlaschkeMetric.compute!
+    #     vlist = []
+    #     for z in zlist:
+    #         r,t = abs(z), phase(z)
+    #         if r > 0.65*self.rmax:
+    #             sys.stderr.write('ODE: Warning: requested interior point is near the boundary; accuracy will be poor.\n')
+    #         j = int(t / self.dt) # Nearest theta that has been computed
+    #         sys.stderr.write('ODE: Using r=%f, t=%f, j=%d (of %d) for z=%f+j%f\n' % (r,t,j,self.nt,z.real,z.imag))
+    #         res = self.rayint(j,r,step=step,tol=tol)
+    #         if result=="point":
+    #             x,y,z = res
+    #             vlist.append( array( (y/x,z/x) ) )
+    #         else:
+    #             vlist.append(res)
+    #     return vlist
 
 def _moduletest():
-    def c1(z):
-        return z*z+0j
-    bl = BlaschkeMetric(6.0,60,180,thresh=0.00001)
-    bl.compute(c1)
-    for j in range(bl.nt):
-        x,y,z=bl.rayint(j,4.0)
-        print y/x, z/x
+    import squaregrid
+    def c(z):
+        return z*z
+    gr = squaregrid.SquareGrid(5.0,100)
+    B = BlaschkeMetric(gr)
+    vlist = B.getboundary(c,50)
+    for v in vlist:
+        print v[0],v[1]
 
 if __name__=='__main__':
     _moduletest()
