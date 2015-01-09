@@ -110,6 +110,8 @@ if args.vertices:
     framelist = bl.getboundary(c,n=nvert,theta0=star_angle,r=args.rint,step=_ODE_RSTEP,tol=args.ode_epsilon,result='frame')
     for F in framelist:
         w,v = np.linalg.eig(np.transpose(F))
-        i = np.argmax(w)
-        print v[1,i] / v[0,i], v[2,i] / v[0,i]
+        i = np.argmax(abs(w))
+	# TODO: Investigate why x,y sometimes have tiny imaginary parts
+        x,y = v[1,i] / v[0,i], v[2,i] / v[0,i]
+	print x.real, y.real
 
