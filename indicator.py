@@ -15,7 +15,7 @@ class percentdone(object):
 
     def set(self,i):
         self.i = i
-        newtic = int(10.0*float(self.i) / float(self.N-1))
+        newtic = int(10.0*float(self.i) / float(self.N))
         if newtic != self.tic:
             self.tic = newtic
             self.output()

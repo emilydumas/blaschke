@@ -1,9 +1,8 @@
-from polarlap import PolarLaplacian
+import numpy as np
 from scipy import sparse,apply_along_axis,vectorize
 from scipy.sparse.linalg import spsolve
-from functools import partial
+import disclap
 import math
-import cmath
 import sys
 
 def bfunc(a):
@@ -16,35 +15,51 @@ def cfunc(a):
     u = a[1]
     return (-2.0*math.exp(u) - 8.0*math.exp(-2.0*u)*cs)
 
+def smoothed_step(t):
+    if t>1.0:
+        return 1.0
+    elif t<0.0:
+        return 0.0
+    else:
+        return 0.5*(1.0 - math.cos(math.pi*t))
+
 # In what follows, cs means "norm C squared", where C is the cubic differential
 
-def uinitfunc(rfrac, cs):
-    '''Smoothed flat metric for initial guess; is exactly the flat metric on the boundary.
-    rfrac = (r/rmax),
+def uinitfunc(req, z, cs):
+    '''Smoothed flat metric for initial guess; is exactly the flat metric when |z| > req
     cs = |C|^2'''
-    rho = 1.0 - (rfrac)**2
+    rho = smoothed_step(1.0 - (abs(z) / req))
     return (1.0/3.0)*math.log(2.0*rho*math.exp(-cs*cs)+2.0*cs)
 
-class WangLinearization(PolarLaplacian):
+class WangLinearization(object):
     """Linearization of Wang equation on a polar grid"""
-    def __init__(self,rmax,nr,nt=None,thresh=0.0000001,maxiter=30):
-        PolarLaplacian.__init__(self,rmax,nr,nt)
+    def __init__(self,grid,thresh=0.0000001,maxiter=30,req=None):
+        self.grid = grid
         self.thresh = thresh
         self.maxiter = maxiter
+        self.lapmat = disclap.disclap(grid)
+        if req == None:
+            self.req = 0.9*self.grid.r
+        else:
+            self.req = req
 
     def compute(self,c,*args,**kwargs):
-        self.cvec = vectorize(c)(self.cplxvec)
+        self.c = c
+        self.cvec = vectorize(c)(self.grid.zv)
         self.csqvec = abs(self.cvec*self.cvec)
         self.u = self.iterate(*args,**kwargs)
 
     def op_bvec(self,uvec):
-        return apply_along_axis(bfunc,0,(self.csqvec,uvec)) - (self.plapmat * uvec)
+        return apply_along_axis(bfunc,0,(self.csqvec,uvec)) - (self.lapmat * uvec)
 
     def op_mulvec(self,uvec):
         return apply_along_axis(cfunc,0,(self.csqvec,uvec))
 
+    def todiag(self,v):
+        return sparse.spdiags(v, [0], self.grid.N, self.grid.N )
+
     def linmat(self,uvec):
-        return self.plapmat + self.todiag(self.op_mulvec(uvec))
+        return self.lapmat + self.todiag(self.op_mulvec(uvec))
 
     def step(self,u):
         udot = spsolve(self.linmat(u),self.op_bvec(u))
@@ -54,13 +69,14 @@ class WangLinearization(PolarLaplacian):
         if uzero != None:
             u = uzero
         else:
-            u = vectorize(uinitfunc)((1/self.rmax)*self.rvec,self.csqvec)
+            u = vectorize(uinitfunc)(self.req,self.grid.zv,self.csqvec)
+        self.uzero = np.copy(u)
         n = 0
         delta = max(abs(self.op_bvec(u)))
         sys.stderr.write('PDE: GOAL=%f\n' % self.thresh)
         while (n < self.maxiter) and (delta > self.thresh):
             udot = self.step(u)
-            u = u + 0.7*udot
+            u = u + 0.9*udot
             delta = max(abs(self.op_bvec(u)))
             udotnorm = max(abs(udot))
             n = n + 1
@@ -68,12 +84,17 @@ class WangLinearization(PolarLaplacian):
         return u
 
 def _moduletest():
+    import squaregrid
     def c(z):
-        return 2.0*z*z*z
-    gr = WangLinearization(8.0,25,50)
-    gr.compute(c)
-    for r,k in gr.diameter_rk(0):
-        print r, gr.u[k]
+        return 2.0*z*z*z - 1j*z + 0.2
+    gr = squaregrid.SquareGrid(3.0,31)
+    W = WangLinearization(gr)
+    W.compute(c)
+    j = int(gr.ny / 2)
+    for i in range(gr.nx):
+        k = gr.toidx(i,j)
+        z = gr.zv[k]
+        print 'u(%g%+gi) = \t%f  (diff from uzero is %f)' % (z.real,z.imag,W.u[k],W.u[k]-W.uzero[k])
 
 if __name__=='__main__':
     _moduletest()
