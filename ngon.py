@@ -1,7 +1,7 @@
 #!/usr/bin/python
 '''Compute the polygon corresponding to an affine sphere with a given polynomial Pick differential'''
 
-_VERSION = '0.1.0'
+_VERSION = '0.1.1'
 
 # DEFAULT SOLVER PARAMETERS
 PDE_THRESH=5e-7
@@ -22,14 +22,15 @@ parser.add_argument('coefs',type=complex,nargs='+',help='coefficients, constant 
 parser.add_argument('--version', action='version', version='%(prog)s '+_VERSION)
 
 group_basic = parser.add_argument_group('basic options')
-group_basic.add_argument('-q','--quiet',action='store_true',help='do not write command line as a comment in output file')
+group_basic.add_argument('-q','--quiet',action='store_true',help='do not put comment lines (date/time, command line, etc.) in output')
 group_basic.add_argument('-t','--theta',type=float,default=0.0,help='multply by exp(i theta)')
 group_basic.add_argument('-b','--boundary',action='store_true',help='output full boundary')
 group_basic.add_argument('-v','--vertices',action='store_true',help='output the vertices')
 group_basic.add_argument('-r','--roots',action='store_true',help='instead of coefficients, roots are given')
 group_basic.add_argument('-z','--zero',action='store_true',help='roots sum to zero (only meaningful if -r | --roots given)')
-# TODO: restore this functionality
-# group_basic.add_argument('--develop',type=complex,nargs='+',help='other points to develop, complex() format')
+
+group_basic.add_argument('--images',type=complex,nargs='+',help='compute images of additional points under developing map (each point given in complex() format)')
+group_basic.add_argument('--root-images',action='store_true',help='compute the images of the roots of the polynomial (requires --roots)')
 
 group_advanced = parser.add_argument_group('advanced options')
 group_advanced.add_argument('--nmesh',type=int,default=PDE_NMESH,help='Number of mesh points on each axis')
@@ -44,8 +45,12 @@ args = parser.parse_args()
 if not args.boundary and not args.vertices:
     args.vertices = True
 
+if args.root_images and not args.roots:
+    parser.error(message='Option --roots required if --root-images is specified')
+
 theta = args.theta
 
+roots = None
 if args.roots:
     # convert roots to polynomial
     roots = args.coefs
@@ -90,28 +95,51 @@ def poly(theta,coefs,z):
 # Compute Blaschke metric, frame field, approximate boundary
 
 gr = SquareGrid(args.rmax,args.nmesh)
-bl = BlaschkeMetric(gr)
 c = partial(poly,theta,coefs)
+bl = BlaschkeMetric(c,gr)
 
 # Output
 
 if not args.quiet:
     from email.Utils import formatdate
-    print '#',' '.join(sys.argv)
     print '#',formatdate(localtime=True)
+    print '#',' '.join(sys.argv)
+    print '#'
 
 if args.boundary:
-    ptlist = bl.getboundary(c,n=args.nray,r=args.rint,step=_ODE_RSTEP,tol=args.ode_epsilon,result='affine')
+    if not args.quiet:
+        print '# BOUNDARY'
+    ptlist = bl.integrate_rays(n=args.nray,r=args.rint,step=_ODE_RSTEP,tol=args.ode_epsilon,return_type='affine')
     for p in ptlist:
         print '%f %f' % tuple(p)
+    print ''
 
 if args.vertices:
+    if not args.quiet:
+        print '# VERTICES'
     star_angle = np.angle(coefs[-1])/float(degree+3)
-    framelist = bl.getboundary(c,n=nvert,theta0=star_angle,r=args.rint,step=_ODE_RSTEP,tol=args.ode_epsilon,result='frame')
+    framelist = bl.integrate_rays(n=nvert,theta0=star_angle,r=args.rint,step=_ODE_RSTEP,tol=args.ode_epsilon,return_type='frame')
     for F in framelist:
         w,v = np.linalg.eig(np.transpose(F))
         i = np.argmax(abs(w))
 	# TODO: Investigate why x,y sometimes have tiny imaginary parts
         x,y = v[1,i] / v[0,i], v[2,i] / v[0,i]
 	print x.real, y.real
+    print ''
+
+if args.root_images:
+    if not args.quiet:
+        print '# ROOT IMAGES'
+    ptlist = bl.integrate_points(roots,step=_ODE_RSTEP,tol=args.ode_epsilon,return_type='affine')
+    for p in ptlist:
+        print '%f %f' % tuple(p)
+    print ''
+
+if args.images:
+    if not args.quiet:
+        print '# POINT IMAGES'
+    ptlist = bl.integrate_points(args.images,step=_ODE_RSTEP,tol=args.ode_epsilon,return_type='affine')
+    for p in ptlist:
+        print '%f %f' % tuple(p)
+    print ''
 
