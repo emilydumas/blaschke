@@ -82,7 +82,7 @@ class BlaschkeMetric(WangLinearization):
     def rayint(self,r,theta,step=0.01,tol=0.00001):
         odef = functools.partial(odeA,theta,self.pcdata)
         solver = ode(odef)
-        solver.set_integrator("vode",method="adams",with_jacobian=False,first_step=(step*r),rtol=tol,nsteps=5000)
+        solver.set_integrator("vode",method="adams",with_jacobian=False,first_step=(step*r),rtol=tol,nsteps=50000)
         solver.set_initial_value(self.yinit,0.0)
         solver.integrate(r)
         return solver.y.reshape((3,3))
