@@ -61,8 +61,11 @@ def phase(z):
         return a
 
 class BlaschkeMetric(WangLinearization):
-    def compute(self,c,*args,**kwargs):
-        WangLinearization.compute(self,c,*args,**kwargs)
+    DEFAULT_RET_TYPE='affine'
+    def __init__(self,*args,**kwargs):
+        WangLinearization.__init__(self,*args,**kwargs)
+
+        # Prepare for ODE integration
         self.ux = disclap.discdx(self.grid) * self.u
         self.uy = disclap.discdy(self.grid) * self.u
         self.yinit = np.eye(3).ravel()
@@ -79,58 +82,42 @@ class BlaschkeMetric(WangLinearization):
                           cval.real,
                           cval.imag] )
 
-    def rayint(self,r,theta,step=0.01,tol=0.00001):
+    def prepare_output(self,F,return_type='affine'):
+        if return_type == 'affine':
+            return F[0,1:] / F[0,0]
+        elif return_type == 'homog':
+            return F[0,:]
+        elif return_type == 'frame':
+            return F
+
+    def integrate_polar(self,r=None,theta=0.0,step=0.01,tol=0.00001,return_type='affine'):
+        # If r not given, use circle 90% of radius of grid incircle
+        if r==None:
+            r = 0.9 * self.grid.r
         odef = functools.partial(odeA,theta,self.pcdata)
         solver = ode(odef)
         solver.set_integrator("vode",method="adams",with_jacobian=False,first_step=(step*r),rtol=tol,nsteps=50000)
         solver.set_initial_value(self.yinit,0.0)
         solver.integrate(r)
-        return solver.y.reshape((3,3))
+        return self.prepare_output(solver.y.reshape((3,3)), return_type)
 
+    def integrate_point(self,z,step=0.01,tol=0.00001,return_type=DEFAULT_RET_TYPE):
+        return self.integrate_polar(r=abs(z),theta=np.angle(z),step=step,tol=tol,return_type=return_type)
 
-    def getboundary(self,c,n,r=None,theta0=0.0,step=0.01,tol=0.0001,result='affine'):
-        thetas = np.linspace(theta0, theta0 + 2*np.pi, num=n, endpoint=False)
-        BlaschkeMetric.compute(self,c)
-        if r==None:
-            r = 0.9 * self.grid.r
-        sys.stderr.write('ODE: integrating %d rays\n' % n)
-        prog = percentdone(n,stream=sys.stderr,prefix='ODE: rays')
-        vlist = []
-        for theta in thetas:
-            res = self.rayint(r,theta,step=step,tol=tol)
-            if result == 'affine':
-                vlist.append( res[0,1:] / res[0,0] )
-            elif result == 'homog':
-                vlist.append( res[0,:] )
-            elif result == 'frame':
-                vlist.append( res )
-            prog.step()
-        return vlist
+    def integrate_rays(self,n,r=None,theta0=0.0,step=0.01,tol=0.0001,return_type=DEFAULT_RET_TYPE):
+        thetalist = np.linspace(theta0, theta0 + 2*np.pi, num=n, endpoint=False)
+        return [ self.integrate_polar(r=r,theta=theta,step=step,tol=tol,return_type=return_type) for theta in thetalist ]
 
-    # def getimages(self,zlist,step=0.01,tol=0.0001):
-    #     # BAD PRACTICE: This function assumes a previous call to BlaschkeMetric.compute!
-    #     vlist = []
-    #     for z in zlist:
-    #         r,t = abs(z), phase(z)
-    #         if r > 0.65*self.rmax:
-    #             sys.stderr.write('ODE: Warning: requested interior point is near the boundary; accuracy will be poor.\n')
-    #         j = int(t / self.dt) # Nearest theta that has been computed
-    #         sys.stderr.write('ODE: Using r=%f, t=%f, j=%d (of %d) for z=%f+j%f\n' % (r,t,j,self.nt,z.real,z.imag))
-    #         res = self.rayint(j,r,step=step,tol=tol)
-    #         if result=="point":
-    #             x,y,z = res
-    #             vlist.append( array( (y/x,z/x) ) )
-    #         else:
-    #             vlist.append(res)
-    #     return vlist
+    def integrate_points(self,zlist,step=0.01,tol=0.00001,return_type=DEFAULT_RET_TYPE):
+        return [ self.integrate_point(z,step=step,tol=tol,return_type=return_type) for z in zlist ]
 
 def _moduletest():
     import squaregrid
     def c(z):
         return z*z
     gr = squaregrid.SquareGrid(5.0,100)
-    B = BlaschkeMetric(gr)
-    vlist = B.getboundary(c,50)
+    B = BlaschkeMetric(c,gr)
+    vlist = B.integrate_rays(50)
     for v in vlist:
         print v[0],v[1]
 

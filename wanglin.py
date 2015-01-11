@@ -33,7 +33,7 @@ def uinitfunc(req, z, cs):
 
 class WangLinearization(object):
     """Linearization of Wang equation on a polar grid"""
-    def __init__(self,grid,thresh=0.0000001,maxiter=30,req=None):
+    def __init__(self,c,grid,thresh=0.0000001,maxiter=30,req=None):
         self.grid = grid
         self.thresh = thresh
         self.maxiter = maxiter
@@ -43,11 +43,10 @@ class WangLinearization(object):
         else:
             self.req = req
 
-    def compute(self,c,*args,**kwargs):
         self.c = c
         self.cvec = vectorize(c)(self.grid.zv)
         self.csqvec = abs(self.cvec*self.cvec)
-        self.u = self.iterate(*args,**kwargs)
+        self.u = self._iterate()
 
     def op_bvec(self,uvec):
         return apply_along_axis(bfunc,0,(self.csqvec,uvec)) - (self.lapmat * uvec)
@@ -65,12 +64,9 @@ class WangLinearization(object):
         udot = spsolve(self.linmat(u),self.op_bvec(u))
         return udot
 
-    def iterate(self,uzero=None):
-        if uzero != None:
-            u = uzero
-        else:
-            u = vectorize(uinitfunc)(self.req,self.grid.zv,self.csqvec)
-        self.uzero = np.copy(u)
+    def _iterate(self):
+        self.uzero = vectorize(uinitfunc)(self.req,self.grid.zv,self.csqvec)
+        u = np.copy(self.uzero)
         n = 0
         delta = max(abs(self.op_bvec(u)))
         sys.stderr.write('PDE: GOAL=%f\n' % self.thresh)
@@ -88,8 +84,7 @@ def _moduletest():
     def c(z):
         return 2.0*z*z*z - 1j*z + 0.2
     gr = squaregrid.SquareGrid(3.0,31)
-    W = WangLinearization(gr)
-    W.compute(c)
+    W = WangLinearization(c,gr)
     j = int(gr.ny / 2)
     for i in range(gr.nx):
         k = gr.toidx(i,j)
