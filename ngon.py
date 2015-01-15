@@ -81,7 +81,6 @@ sys.stderr.write('degree=%d coefs=%s\n' % (degree,coefs))
 nvert = degree+3
 
 import numpy as np
-from indicator import percentdone
 from squaregrid import SquareGrid
 from blaschkemet import BlaschkeMetric
 from functools import partial
