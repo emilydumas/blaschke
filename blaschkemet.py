@@ -1,12 +1,9 @@
 import numpy as np
+import scipy.interpolate
+import scipy.integrate
 import disclap
 from wanglin import WangLinearization
-from scipy import sin,cos,arange,interpolate,array,vectorize,matrix,real
 import functools
-import sys
-from indicator import percentdone
-
-from scipy.integrate import ode
 
 # CONVENTIONS
 
@@ -26,9 +23,9 @@ def coefmat_dx(a):
 
     emu = np.exp(-u)
 
-    return matrix([ [0.0, 1.0, 0.0],
-                    [np.exp(u), cr*emu + 0.5*ux, -ci*emu - 0.5*uy],
-                    [0.0, -ci*emu + 0.5*uy, -cr*emu + 0.5*ux] ])
+    return np.matrix([ [0.0, 1.0, 0.0],
+                       [np.exp(u), cr*emu + 0.5*ux, -ci*emu - 0.5*uy],
+                       [0.0, -ci*emu + 0.5*uy, -cr*emu + 0.5*ux] ])
 
 def coefmat_dy(a):
     u = a[0]
@@ -39,17 +36,17 @@ def coefmat_dy(a):
 
     emu = np.exp(-u)
 
-    return matrix([ [0.0, 0.0, 1.0],
-                    [0.0, -ci*emu + 0.5*uy, -cr*emu + 0.5*ux],
-                    [np.exp(u), -cr*emu - 0.5*ux, ci*emu + 0.5*uy] ])
+    return np.matrix([ [0.0, 0.0, 1.0],
+                       [0.0, -ci*emu + 0.5*uy, -cr*emu + 0.5*ux],
+                       [np.exp(u), -cr*emu - 0.5*ux, ci*emu + 0.5*uy] ])
 
 
 def coefmat(theta,a):
-    return cos(theta)*coefmat_dx(a) + sin(theta)*coefmat_dy(a)
+    return np.cos(theta)*coefmat_dx(a) + np.sin(theta)*coefmat_dy(a)
 
 def odeA(theta,pcdata,t,y):
     m = coefmat(theta,pcdata(t * np.exp(1j*theta)))
-    ya = matrix(y)
+    ya = np.matrix(y)
     ya.shape = (3,3)
     return (m * ya).ravel() # flatten 3x3 matrix to 9-vector
 
@@ -70,9 +67,9 @@ class BlaschkeMetric(WangLinearization):
         self.uy = disclap.discdy(self.grid) * self.u
         self.yinit = np.eye(3).ravel()
         
-        self.uinterp = interpolate.RectBivariateSpline(self.grid.x,self.grid.y,np.transpose(self.u.reshape((self.grid.nx,self.grid.ny))))
-        self.uxinterp = interpolate.RectBivariateSpline(self.grid.x,self.grid.y,np.transpose(self.ux.reshape((self.grid.nx,self.grid.ny))))
-        self.uyinterp = interpolate.RectBivariateSpline(self.grid.x,self.grid.y,np.transpose(self.uy.reshape((self.grid.nx,self.grid.ny))))
+        self.uinterp = scipy.interpolate.RectBivariateSpline(self.grid.x,self.grid.y,np.transpose(self.u.reshape((self.grid.nx,self.grid.ny))))
+        self.uxinterp = scipy.interpolate.RectBivariateSpline(self.grid.x,self.grid.y,np.transpose(self.ux.reshape((self.grid.nx,self.grid.ny))))
+        self.uyinterp = scipy.interpolate.RectBivariateSpline(self.grid.x,self.grid.y,np.transpose(self.uy.reshape((self.grid.nx,self.grid.ny))))
 
     def pcdata(self,z):
         cval = self.c(z)
@@ -95,7 +92,7 @@ class BlaschkeMetric(WangLinearization):
         if r==None:
             r = 0.9 * self.grid.r
         odef = functools.partial(odeA,theta,self.pcdata)
-        solver = ode(odef)
+        solver = scipy.integrate.ode(odef)
         solver.set_integrator("vode",method="adams",with_jacobian=False,first_step=(step*r),rtol=tol,nsteps=50000)
         solver.set_initial_value(self.yinit,0.0)
         solver.integrate(r)
