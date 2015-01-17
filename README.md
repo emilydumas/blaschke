@@ -23,6 +23,7 @@ equations using an ODE solver from `scipy.integrate`.
 * Scipy
 * Numpy
 
+
 ### Usage examples
 
 The main program is `ngon.py` which takes a polynomial as input and
@@ -59,6 +60,10 @@ writes a list of vertices as output.
   hyphen is used to signal that there are no further options on the
   command line.)
 
+
+### Status
+
+The code is still under active development and is of alpha quality.  Comments, questions, suggestions, and bug reports are welcomed.
 
 ### Applications: Moduli spaces and the fence conjecture
 
