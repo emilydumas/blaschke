@@ -1,7 +1,7 @@
 #!/usr/bin/python
 '''Compute the polygon corresponding to an affine sphere with a given polynomial Pick differential'''
 
-_VERSION = '0.1.1'
+_VERSION = '0.1.2dev'
 
 # DEFAULT SOLVER PARAMETERS
 PDE_THRESH=5e-7
