@@ -116,7 +116,7 @@ if args.boundary:
 if args.vertices:
     if not args.quiet:
         print '# VERTICES'
-    star_angle = np.angle(coefs[-1])/float(degree+3)
+    star_angle = -np.angle(coefs[-1])/float(degree+3)
     framelist = bl.integrate_rays(n=nvert,theta0=star_angle,r=args.rint,step=_ODE_RSTEP,tol=args.ode_epsilon,return_type='frame')
     for F in framelist:
         w,v = np.linalg.eig(np.transpose(F))
